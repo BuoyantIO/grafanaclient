@@ -144,8 +144,8 @@ type DashboardUploader struct {
 // A DashboardResult contains the response from Grafana when requesting a Dashboard.
 // It contains the Dashboard itself and the meta data.
 type DashboardResult struct {
-	Meta  Meta      `json:"meta"`
-	Model Dashboard `json:"model"`
+	Meta      Meta      `json:"meta"`
+	Dashboard Dashboard `json:"dashboard"`
 }
 
 // A Meta contains a Dashboard metadata.
@@ -255,20 +255,18 @@ type Panel struct {
 	Legend          Legend           `json:"legend,omitempty"`
 	LeftYAxisLabel  string           `json:"leftYAxisLabel,omitempty"`
 	RightYAxisLabel string           `json:"rightYAxisLabel,omitempty"`
+	TimeFrom        string           `json:"timeFrom"`
 }
 
 // A Target specify the metrics used by the Panel
 type Target struct {
-	Alias       string    `json:"alias"`
-	Function    string    `json:"function"`
-	Hide        bool      `json:"hide"`
-	Query       string    `json:"query"`
-	RawQuery    bool      `json:"rawQuery"`
-	Measurement string    `json:"measurement"`
-	GroupByTags []string  `json:"groupByTags"`
-	GroupBy     []GroupBy `json:"groupBy"`
-	Tags        []Tag     `json:"tags"`
-	Transform   string    `json:"transform,omitempty" toml:"transform,omitempty"`
+	Expr           string `json:"expr"`
+	IntervalFactor int    `json:"intervalFactor"`
+	LegendFormat   string `json:"legendFormat"`
+	Metric         string `json:"metric"`
+	RefId          string `json:"refId"`
+	Step           int    `json:"step"`
+	Tags           []Tag  `json:"tags"`
 }
 
 // A Legend specify the legend options used by the Panel
@@ -353,7 +351,7 @@ func NewPanel() Panel {
 
 // NewTarget create a new Grafana target with default values
 func NewTarget() Target {
-	return Target{Function: "mean", RawQuery: false, Alias: "$tag_host $tag_name"}
+	return Target{Expr: "mean"}
 }
 
 // NewLegend create a new Grafana legend with default values
@@ -398,7 +396,7 @@ func (s *Session) httpRequest(method string, url string, body io.Reader) (result
 
 	response, err := s.client.Do(request)
 	if err != nil {
-		return result, GrafanaError{0, "Unable to perform the http request"}
+		return result, GrafanaError{0, err.Error()}
 	}
 
 	//	defer response.Body.Close()
@@ -630,17 +628,11 @@ func ConvertTemplate(file string) (dashboard Dashboard, err error) {
 				fields := strings.Join(metric.Fields, "|")
 				hosts := strings.Join(metric.Hosts, "|")
 
-				target.Measurement = metric.Measurement
-
 				// adding tags
 				hostTag := Tag{Key: "host", Value: "/" + hosts + "/"}
 				target.Tags = append(target.Tags, hostTag)
 				fieldsTag := Tag{Key: "name", Value: "/" + fields + "/", Condition: "AND"}
 				target.Tags = append(target.Tags, fieldsTag)
-				target.GroupByTags = []string{"name", "host"}
-				target.GroupBy = NewGroupBy()
-				target.GroupBy = append(target.GroupBy, GroupBy{Type: "tag", Params: []string{"name"}})
-				target.GroupBy = append(target.GroupBy, GroupBy{Type: "tag", Params: []string{"host"}})
 				panel.Targets = append(panel.Targets, target)
 			}
 		}
