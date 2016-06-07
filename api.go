@@ -141,6 +141,12 @@ type DashboardUploader struct {
 	Overwrite bool      `json:"overwrite"`
 }
 
+type UploaderResult struct {
+	Slug    string `json:"slug"`
+	Status  string `json:"status"`
+	Version int    `json:"version"`
+}
+
 // A DashboardResult contains the response from Grafana when requesting a Dashboard.
 // It contains the Dashboard itself and the meta data.
 type DashboardResult struct {
@@ -534,15 +540,14 @@ func (s *Session) GetDashboard(name string) (dashboard DashboardResult, err erro
 // If valid, the dashboard structure will be sent to UploadDashboard.
 // overwrite parameter define if it overwrite existing dashboard.
 // It returns a error if a problem occurs when trying to create the dashboard.
-func (s *Session) UploadDashboardString(dashboard string, overwrite bool) (err error) {
+func (s *Session) UploadDashboardString(dashboard string, overwrite bool) (string, error) {
 	dec := json.NewDecoder(bytes.NewBuffer([]byte(dashboard)))
 	var ds Dashboard
-	err = dec.Decode(&ds)
+	err := dec.Decode(&ds)
 	if err != nil {
-		return GrafanaError{0, "dashboard template in wrong format"}
+		return "", GrafanaError{0, "dashboard template in wrong format"}
 	}
-	err = s.UploadDashboard(ds, overwrite)
-	return
+	return s.UploadDashboard(ds, overwrite)
 }
 
 // UploadDashboard upload a new Dashboard.
@@ -550,7 +555,7 @@ func (s *Session) UploadDashboardString(dashboard string, overwrite bool) (err e
 // It encapsulate it in a DashboardUploader structure.
 // overwrite parameter define if it overwrite existing dashboard.
 // It returns a error if a problem occurs when creating the dashboard.
-func (s *Session) UploadDashboard(dashboard Dashboard, overwrite bool) (err error) {
+func (s *Session) UploadDashboard(dashboard Dashboard, overwrite bool) (string, error) {
 	reqURL := s.url + "/api/dashboards/db"
 
 	var content DashboardUploader
@@ -558,8 +563,21 @@ func (s *Session) UploadDashboard(dashboard Dashboard, overwrite bool) (err erro
 	content.Overwrite = overwrite
 	jsonStr, _ := json.Marshal(content)
 
-	_, err = s.httpRequest("POST", reqURL, bytes.NewBuffer(jsonStr))
-	return
+	body, err := s.httpRequest("POST", reqURL, bytes.NewBuffer(jsonStr))
+
+	if err != nil {
+		return "", err
+	}
+
+	dec := json.NewDecoder(body)
+	var result UploaderResult
+	err = dec.Decode(&result)
+
+	if err != nil {
+		return "", err
+	}
+
+	return result.Slug, nil
 }
 
 //DeleteDashboard delete a Grafana Dashboard.
